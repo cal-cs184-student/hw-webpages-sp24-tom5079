@@ -1,7 +1,232 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Homework 1 index.html here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184/284A Rasterizer</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184/284A: Computer Graphics and Imaging, Spring 2024</h1>
+<h1 align="middle">Homework 1: Rasterizer</h1>
+<h2 align="middle">MINSEOK SON</h2>
+
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p>
+  I implemented rasterization and applied texture with mipmap.
+  It was very slow on software, and I am curious about the complexity of the hardware circuit
+  in my GPU to handle all of these computations.
+</p>
+
+<h2 align="middle">Section I: Rasterization</h2>
+
+<h3 align="middle">Part 1: Rasterizing single-color triangles</h3>
+
+<p>
+  First step of my rasterization process is to calculate the bounding box
+  by calculating the min and max of each x and y coordinates of three vertices.
+
+  Then, for each point I performed three cross product checks to see if the dot
+  lies inside the triangle or on the outside.
+
+  It is no worse than the algorithm that checks each sample within the bounding box
+  because this is exactly what I am doing.
+</p>
+
+<div align="middle">
+  <img src="images/rasterization.png" align="middle" width="50%" />
+</div>
+
+<h3 align="middle">Part 2: Antialiasing triangles</h3>
+
+<p>
+  Supersampling is done by using the same process as the normal rasterization
+  algorithm, but using closer steps instead.
+
+  instead of stepping 1 pixel to the left (or down), we step 1/sqrt(n) pixel.
+
+  The result is stored in a normal 2d array but one pixel now corresponds to
+  n rectangles instead of 1.
+
+  The values are then averaged together at the framebuffer resolution step.
+</p>
+
+<div align="middle">
+  <img src="images/supersample-1x.png" width="30%" />
+  <img src="images/supersample-4x.png" width="30%" />
+  <img src="images/supersample-16x.png" width="30%" />
+  <p>
+    left: 1x
+    middle: 4x
+    right: 16x
+  </p>
+</div>
+
+
+<h3 align="middle">Part 3: Transforms</h3>
+
+<div align="middle">
+  <img src="images/transform.png" width="50%">
+  <p>
+    robot torn apart
+  </p>
+</div>
+
+<h2 align="middle">Section II: Sampling</h2>
+
+<h3 align="middle">Part 4: Barycentric coordinates</h3>
+
+<p>
+  Barycentric coordinates is a way to express a point inside a triangle as a
+  linear combination of the vectors that point to the vertices.
+
+  We can use this to interpolate various elements inside the triangle such as color or uv coordinate.
+</p>
+
+<div align="middle">
+  <img src="images/barycentric-exp.png" width="50%"/>
+</div>
+
+<div align="middle">
+  <img src="images/barycentric.png" width="50%"/>
+</div>
+
+<h3 align="middle">Part 5: "Pixel sampling" for texture mapping</h3>
+
+<p>
+  Pixel sampling is a way to estimate a pixel value in a continuous coordinate space
+  when we only have data at discrete coordinates.
+
+  Nearest sampling simply takes the value of the nearest discrete coordinate,
+  while biliear sampling performs weighted average of the nearby pixels
+  based on the proximity to those points.
+</p>
+
+<div align="middle">
+  <table style="width: 100%">
+    <tr>
+      <td>
+        <img src="images/nearest-1x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest, 1x</figcaption>
+      </td>
+      <td>
+        <img src="images/nearest-16x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest, 16x</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/bilinear-1x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear, 1x</figcaption>
+      </td>
+      <td>
+        <img src="images/bilinear-16x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear, 16x</figcaption>
+      </td>
+    </tr>
+  </table>
+
+</div>
+
+<p>
+  The difference is more noticable in 1x case, and there is virtually no difference in 16x case.
+  <br/>
+  There will be a large difference when there is a large change of texture coordinate between pixels
+  because it causes aliasing.
+  Bilinear sampling acts like a low pass filter by averaging and reduces aliasing effect.
+</p>
+
+
+<h3 align="middle">Part 6: "Level sampling" with mipmaps for texture mapping</h3>
+
+<p>
+  level sampling works by having a "mipmap" which is a preprocessed downscaled version 
+  of the original texture and sampling from different levels of texture.
+  <br/>
+  This works because we can preapply low pass filter when we downsample, which reduces
+  the cost as we don't have to average pixels while sampling.
+  <br/>
+  I calculated which level to use by approximating the "footprint" of the pixel in the
+  texture by calculating the uv coordinates of the pixel to the right and above, and
+  using the maximum length of those two. Then I applied log2 convert pixels to mipmap levels
+  (as the size halves as you go up one level).
+  <br/>
+  Supersampling yields the most accurate result but it is very costly in terms of computing.
+  <br/>
+  Pixel sampling is the cheapest, but it is limited to 1 pixel wide box filter.
+  <br/>
+  Level sampling uses more memory, but it yields better result than pixel sampling as
+  we can apply wider box filter and reduce aliasing.
+</p>
+
+<div align="middle">
+  <table style="width: 100%">
+    <tr>
+      <td>
+        <img src="images/level-raw-1x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nothing, 1x</figcaption>
+      </td>
+      <td>
+        <img src="images/level-raw-16x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nothing, 16x</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/level-bilinear-1x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear pixel sampling, 1x</figcaption>
+      </td>
+      <td>
+        <img src="images/level-bilinear-16x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear pixel sampling, 16x</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/level-nearest-1x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest level sampling, 1x</figcaption>
+      </td>
+      <td>
+        <img src="images/level-nearest-16x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest level sampling, 16x</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/level-linear-1x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear level sampling, 1x</figcaption>
+      </td>
+      <td>
+        <img src="images/level-linear-16x.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear level sampling, 16x</figcaption>
+      </td>
+    </tr>
+  </table>
+
+</div>
+</body>
 </html>
